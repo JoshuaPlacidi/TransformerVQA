@@ -1,5 +1,10 @@
 import torch
 
-from training import train, evaluate
-from model import get_model
-from dataset import get_tgif_dataset
+import config
+
+#from training import train, evaluate
+from model import get_PTVQA
+#from dataset import get_tgif_dataset
+
+model = get_PTVQA()
+print(model)
