@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 import math
 
 class TransformerEncoder(nn.Module):
 	'''
 	Transformer encoder
 	'''
-	def __init__(self, h_dim, ff_dim, num_heads, num_layers, dropout):
+	def __init__(self, h_dim, ff_dim, num_heads=8, num_layers=6, dropout=0.1):
 		'''
 		h_dim = hidden dimension size
 		ff_dim = feedforard dimension size
@@ -16,7 +18,7 @@ class TransformerEncoder(nn.Module):
 		'''
 		super(TransformerEncoder, self).__init__()
 		self.pos_encoder = PositionalEncoding(h_dim)
-		self.encoder_layer = TransformerEncoderLayer(d_model=h_dim, nhead=num_heads, dim_feedforward=ff_dim, dropout=dropout)
+		self.encoder_layer = TransformerEncoderLayer(h_dim=h_dim, ff_dim=ff_dim, num_heads=num_heads, dropout=dropout)
 		self.layer_norm = nn.LayerNorm(h_dim)
 		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers, norm=self.layer_norm)
 
@@ -27,16 +29,16 @@ class TransformerEncoder(nn.Module):
 
 class TransformerEncoderLayer(nn.Module):
 
-	def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+	def __init__(self, h_dim, ff_dim, num_heads, dropout=0.1, activation="relu"):
 		super(TransformerEncoderLayer, self).__init__()
-		self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+		self.self_attn = nn.MultiheadAttention(h_dim, num_heads, dropout=dropout)
 		# Implementation of Feedforward model
-		self.linear1 = nn.Linear(d_model, dim_feedforward)
+		self.linear1 = nn.Linear(h_dim, ff_dim)
 		self.dropout = nn.Dropout(dropout)
-		self.linear2 = nn.Linear(dim_feedforward, d_model)
+		self.linear2 = nn.Linear(ff_dim, h_dim)
 
-		self.norm1 = nn.LayerNorm(d_model)
-		self.norm2 = nn.LayerNorm(d_model)
+		self.norm1 = nn.LayerNorm(h_dim)
+		self.norm2 = nn.LayerNorm(h_dim)
 		self.dropout1 = nn.Dropout(dropout)
 		self.dropout2 = nn.Dropout(dropout)
 
@@ -56,6 +58,117 @@ class TransformerEncoderLayer(nn.Module):
 		src = self.norm2(src)
 		src = src + self.dropout2(src2)
 		return src 
+
+class TransformerDecoder(nn.Module):
+	'''
+	Transformer decoder class
+	input: encoder output [batch, seq, hid dim], text (targets), overlap and scene [batch, num objs, embed dim], is_train bool
+	return: sequence of probability distribution over num_classes [batch, seq, num_classes]
+	'''
+	def __init__(self, h_dim, vocab_size, num_heads=8, num_layers=6, dropout=0.1):
+		super(TransformerDecoder, self).__init__()
+		self.decoder_layer = TransformerDecoderLayer(h_dim=h_dim, ff_dim=h_dim, num_heads=8, dropout=0.1)
+		self.layer_norm = nn.LayerNorm(h_dim)
+		self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers, norm=self.layer_norm)
+		self.pos_encoder = PositionalEncoding(h_dim)
+
+		self.hid_to_emb = nn.Linear(h_dim, vocab_size)
+
+	def _generate_square_subsequent_mask(self, sz):
+		mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+		mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+		return mask
+
+
+	def forward(self, multimodal_features, answers, is_train):
+		if is_train: # Training
+
+			# convert targets from [batch, seq, feats] -> [seq, batch, feats] and apply embedding and position encoding
+			targets = answers[:memory.shape[1],:]
+			targets = targets.permute(1,0)
+			targets = self.pos_encoder(targets)
+
+			# generate target mask and pass to decoder
+			target_mask = self._generate_square_subsequent_mask(answers.shape[1])
+			output = self.decoder(tgt=targets, memory=multimodal_features, tgt_mask=target_mask, is_train=is_train)
+
+			output = self.emb_to_classes(output)
+
+		else: # Inference
+
+			# Declare targets and output as zero tensors of output shape
+			targets = torch.zeros(multimodal_features.shape[1], answers.shape[1]).to(multimodal_features.device)
+			targets = targets.permute(1,0)
+
+			output = torch.zeros(config.MAX_TEXT_LENGTH, memory.shape[1], self.num_classes).to(encoder_output.device)
+
+			for t in range(config.MAX_TEXT_LENGTH):
+
+				target_mask = self._generate_square_subsequent_mask(t+1).to(encoder_output.device)
+				
+				# convert targets into embeddings and apply positional encoding
+				emb_targets = self.pos_encoder(self.emb(answers.long()))
+				
+				# pass embed targets and encoder memory to decoder
+				t_output = self.decoder(tgt=emb_targets[:t+1], memory=multimodal_features, tgt_mask=target_mask, is_train=is_train)
+
+				# map embeding dim to number of classes
+				t_output = self.emb_to_classes(t_output)
+
+				# take index class with max probability and append to targets and output sequence
+				_, char_index = t_output[-1].max(1)
+				targets[t+1,:] = char_index
+				output[t,:] = t_output[t]
+
+		output = output.permute(1,0,2)
+
+		return output
+
+class TransformerDecoderLayer(nn.Module):
+	'''
+	Pytorch implementation of transformer decoder layer
+	'''
+	def __init__(self, h_dim, ff_dim=2048, num_heads=8, dropout=0.1):
+		super(TransformerDecoderLayer, self).__init__()
+		self.self_attn = nn.MultiheadAttention(h_dim, num_heads, dropout=dropout)
+		self.multihead_attn = nn.MultiheadAttention(h_dim, num_heads, dropout=dropout)
+
+		self.linear1 = nn.Linear(h_dim, ff_dim)
+		self.dropout = nn.Dropout(dropout)
+		self.linear2 = nn.Linear(ff_dim, h_dim)
+
+		self.norm1 = nn.LayerNorm(h_dim)
+		self.norm2 = nn.LayerNorm(h_dim)
+		self.norm3 = nn.LayerNorm(h_dim)
+		self.dropout1 = nn.Dropout(dropout)
+		self.dropout2 = nn.Dropout(dropout)
+		self.dropout3 = nn.Dropout(dropout)
+
+		self.activation = F.relu
+
+
+	def __setstate__(self, state):
+		if 'activation' not in state:
+			state['activation'] = F.relu
+		super(TransformerDecoderLayer, self).__setstate__(state)
+
+	def forward(self, tgt, memory, semantics, tgt_mask=None, memory_mask=None, tgt_key_padding_mask=None, memory_key_padding_mask=None, is_train=False):
+		
+		tgt2 = self.self_attn(tgt, tgt, tgt, attn_mask=tgt_mask,
+							  key_padding_mask=tgt_key_padding_mask)[0]
+		tgt = tgt + self.dropout1(tgt2)
+		tgt = self.norm1(tgt)
+
+		tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask,
+								   key_padding_mask=memory_key_padding_mask)[0]
+		tgt = tgt + self.dropout2(tgt2)
+		tgt = self.norm2(tgt)
+
+		tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+		tgt = tgt + self.dropout3(tgt2)
+		tgt = self.norm3(tgt)
+		return tgt
+
 
 class PositionalEncoding(nn.Module):
 
