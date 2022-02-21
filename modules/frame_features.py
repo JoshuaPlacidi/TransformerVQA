@@ -10,5 +10,5 @@ def get_feature_extractor(model="resnet"):
 
 def get_resnet_extractor():
 	resnet = models.resnet18(pretrained=False)
-	resnet.classifier = nn.Sequential(*list(resnet.classifier.children())[:-1]) # Remove last linear layer of resnet
+	resnet = torch.nn.Sequential(*(list(resnet.children())[:-1]))
 	return resnet
