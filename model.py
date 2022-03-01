@@ -23,16 +23,18 @@ class PTVQA(nn.Module):
 		# Multimodal Decoder
 		self.multimodal_decoder = TransformerDecoder(h_dim=256, vocab_size=100, num_heads=8, dropout=0.1)
 
-	def forward(self, frames, questions, answers):
+	def forward(self, frames, questions, answer_choices):
 		frame_features = self.feature_extractor(frames)
 
-		language_features = self.language_encoder(question)
+		question_features = self.language_encoder(questions)
 
-		multimodal_features = self.multimodal_encoder(torch.cat([frame_features, language_features]))
+		answer_features = self.language_encoder(answer_choices)
 
-		predictions = self.multimoda_decoder(answers, multimodal_features)
+		#multimodal_features = self.multimodal_encoder(torch.cat([frame_features, language_features]))
 
-		return predictions
+		#predictions = self.multimodal_decoder(answer_choices, multimodal_features)
+
+		return 0
 
 def get_PTVQA():
 	return PTVQA()

@@ -2,12 +2,19 @@ import torch
 
 import config
 
-#from training import train, evaluate
+from training import train
 from model import get_PTVQA
 from datasets import get_dataset
 
-train_dataset, val_dataset, test_dataset = get_dataset("TGIF", "/data/tgif/images", "data/tgif/annotation_file.txt")
+train_set, val_set, test_set = get_dataset(
+    data_source = "TGIF",
+    image_folder = config.tgif_folder_location + "gifs/",
+    annotation_file = config.tgif_folder_location + "train_action_question.csv"
+    )
 
 model = get_PTVQA()
-print(model)
-print('number of params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
+
+train(model, train_set)
+
+
+#print(model)
