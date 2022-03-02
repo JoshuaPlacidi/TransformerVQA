@@ -6,3 +6,4 @@ def train(model, dataset):
         frames, questions, answer_choices, ground_truth = sample
         
         predictions = model(frames, questions, answer_choices)
+        break

@@ -19,19 +19,21 @@ class TGIF_dataset(Dataset):
 	def get_image_frames(self, path):
 		gif = Image.open(path)
 		image_list = []
-		for f in range(0, gif.n_frames, 4):
+
+		# TODO: rewrite range calculation to account for different numbers of frames and how frames should be 'skipped'
+		for f in range(0, config.padded_frame_length, 1):
 			gif.seek(f)
-			frame = self.resize(gif)
+			frame = self.resize(gif).convert('RGB')
 			image_tensor = self.to_tensor(frame).squeeze()
 			image_list.append(image_tensor)
 		return torch.stack(image_list)
 
 	def __getitem__(self, idx):
 		sample = self.annotations.iloc[[idx]]
-		image_path = self.image_folder_path + 'test.gif' #self.image_folder_path + sample['gif_name'].iloc[0] + '.gif'
-		image_frames = self.get_image_frames(image_path)
+		image_path = self.image_folder_path + 'test.gif' # TODO: self.image_folder_path + sample['gif_name'].iloc[0] + '.gif'
+		image_frames = self.get_image_frames(image_path) # TODO: avoid calculating the gif frames here, instead should be done for every gif in init()
 		question = sample['question'].iloc[0]
-		answer_choices = [sample['a' + str(answer_key)].iloc[0] for answer_key in range(1,5)]
+		answer_choices = [sample['a' + str(answer_key)].iloc[0] for answer_key in range(1,6)]
 		ground_truth = sample['answer'].iloc[0]
 		return image_frames, question, answer_choices, ground_truth
 

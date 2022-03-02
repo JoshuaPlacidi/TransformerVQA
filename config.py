@@ -2,9 +2,14 @@
 
 device = 'cuda:0'#"cpu"
 
-batch_size = 92
+batch_size = 3
 
-image_size = (100,100)
+image_size = (256,256)
+
+h_dim = 256
+padded_frame_length = 20
+padded_language_length = 10
+
 
 
 # dataset locations
