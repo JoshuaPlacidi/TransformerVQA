@@ -25,7 +25,7 @@ class TransformerEncoder(nn.Module):
 	def forward(self, x):
 		x = self.pos_encoder(x)
 		x = self.encoder(x)
-		return output
+		return x
 
 class TransformerEncoderLayer(nn.Module):
 
