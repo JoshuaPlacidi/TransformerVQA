@@ -113,12 +113,11 @@ def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
 	if data_source=="TGIF":
 		dataset_class = TGIF_dataset
 	elif data_source=="GIF_preproc":
-		return [DataLoader(
+		return DataLoader(
 			GIF_preproc(image_folder),
 			batch_size=config.batch_size,
 			shuffle=True,
-			num_workers=0) 
-			for mode in modes]
+			num_workers=0)
 	else:
 		raise Exception("data source not recognised:", data_source)
 

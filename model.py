@@ -78,3 +78,18 @@ class PTVQA(nn.Module):
 
 def get_PTVQA():
 	return PTVQA()
+
+class ImageFeatureExtractor(nn.Module):
+	def __init__(self):
+		super(ImageFeatureExtractor, self).__init__()
+		
+		self.feature_extractor = get_feature_extractor("resnet", h_dim=config.h_dim)
+	
+	def forward(self, x):
+		stacked_x = torch.reshape(x, shape=(config.batch_size*config.padded_frame_length, 3, config.image_size[0], config.image_size[1]))
+		stacked_x = self.feature_extractor(stacked_x)
+		x = torch.reshape(stacked_x, shape=(config.batch_size, config.padded_frame_length, -1))
+		return x
+
+def get_ImageFeatureExtractor():
+	return ImageFeatureExtractor()
