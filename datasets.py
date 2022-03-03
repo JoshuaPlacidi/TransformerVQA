@@ -8,7 +8,18 @@ import pandas as pd
 import config
 import os
 import numpy as np
-import time
+
+class text_preproc(Dataset):
+	def __init__(self, annotation_file, mode="train"):
+		self.annotation_file = annotation_file
+		self.dataset = pd.read_csv(annotation_file)
+
+	def __len__(self):
+		return len(self.dataset)
+
+	def __getitem__(self, idx):
+		sample = self.dataset.iloc[idx]
+		return sample["gif_name"], sample["question"], [sample["a1"], sample["a2"], sample["a3"], sample["a4"], sample["a5"]]
 
 class GIF_preproc(Dataset):
 	def __init__(self, image_folder, mode="train"):
@@ -120,6 +131,14 @@ def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
 			batch_size=config.batch_size,
 			shuffle=True,
 			num_workers=0)
+	
+	elif data_source=="text_preproc":
+		return DataLoader(
+			text_preproc(annotation_file),
+			batch_size=config.batch_size,
+			shuffle=True,
+			num_workers=0)
+
 	else:
 		raise Exception("data source not recognised:", data_source)
 
