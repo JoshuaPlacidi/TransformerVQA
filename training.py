@@ -3,6 +3,7 @@ from tqdm import tqdm
 import config
 import time
 
+# TODO Finish implementing training loop
 def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 	import torch.optim as optim
 	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
@@ -32,10 +33,11 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 
 def gif_preproc(model, dataset, save_folder):
 	import pickle
+	model.to(config.device)
 
 	for batch in tqdm(dataset):
 		filenames, gifs, masks = batch
-		feature_tensor = model(gifs)
+		feature_tensor = model(gifs.to(config.device))
 		
 		for i in range(config.batch_size):
 			filename_i = filenames[i]

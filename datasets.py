@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 
 from PIL import Image
+from PIL import ImageFile
 import pandas as pd
 import config
 import os
@@ -16,6 +17,7 @@ class GIF_preproc(Dataset):
 		self.to_tensor = transforms.ToTensor()
 		self.resize = transforms.Resize(config.image_size)
 		self.mode = mode
+		ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 	def __len__(self):
 		return len(self.filenames)

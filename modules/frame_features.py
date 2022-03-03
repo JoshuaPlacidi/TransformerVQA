@@ -7,15 +7,27 @@ class ResNet(nn.Module):
 		super(ResNet, self).__init__()
 		self.resnet = models.resnet18(pretrained=False)
 		self.resnet = torch.nn.Sequential(*(list(self.resnet.children())[:-1]))
-		self.to_hid = nn.Linear(512, h_dim)
+		#self.to_hid = nn.Linear(512, h_dim)
 	
 	def forward(self, x):
 		x = self.resnet(x).squeeze()
-		x = self.to_hid(x)
+		#x = self.to_hid(x)
 		return x
+
+# TODO Implement DeiT using huggingface
+class DeiT(nn.Module):
+	def __init__(self, h_dim):
+		super(DeiT, self).__init__()
+
+	def forward(self, x):
+		return x
+
+
 
 def get_feature_extractor(model="resnet", h_dim=None):
 	if model=="resnet":
 		return ResNet(h_dim)
+	elif model=="deit":
+		return DeiT(h_dim)
 	else:
 		raise Exception("Feature extractor model not recognized:", model)
