@@ -136,7 +136,7 @@ def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
 		return DataLoader(
 			text_preproc(annotation_file),
 			batch_size=config.batch_size,
-			shuffle=True,
+			shuffle=False,
 			num_workers=0)
 
 	else:
