@@ -20,10 +20,23 @@ class TransformerEncoder(nn.Module):
 		self.pos_encoder = PositionalEncoding(h_dim)
 		self.encoder_layer = TransformerEncoderLayer(h_dim=h_dim, ff_dim=ff_dim, num_heads=num_heads, dropout=dropout)
 		self.layer_norm = nn.LayerNorm(h_dim)
+
+		# TODO
+		self.segment_embedding = nn.Embedding(3, h_dim)
+		self.pair_idx=[(0, 20), (20, 34), (34, 42)]
+
 		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers, norm=self.layer_norm)
 
 	def forward(self, x):
-		x = self.pos_encoder(x)
+		# TODO is this correct?	
+		x = x + torch.cat([self.pos_encoder(x[:, ini:fin]) + self.segment_embedding(x[:, ini:fin]) for ini, fin in (self.pair_idx)])
+		
+		# x = self.pos_encoder(x)
+
+		# x = self.pos_encoder(x)
+		
+
+
 		x = self.encoder(x)
 		return x
 
@@ -169,22 +182,41 @@ class TransformerDecoderLayer(nn.Module):
 		tgt = self.norm3(tgt)
 		return tgt
 
-
 class PositionalEncoding(nn.Module):
 
-	def __init__(self, d_model, dropout=0.1, max_len=26):
-		super(PositionalEncoding, self).__init__()
-		self.dropout = nn.Dropout(p=dropout)
+    def __init__(self, d_model, max_len=512):
+        super().__init__()
 
-		pe = torch.zeros(max_len, d_model)
-		position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-		div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-		pe[:, 0::2] = torch.sin(position * div_term)
-		pe[:, 1::2] = torch.cos(position * div_term)
-		pe = pe.unsqueeze(0).transpose(0, 1)
-		self.register_buffer('pe', pe)
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model).float()
+        pe.require_grad = False
 
-	def forward(self, x):
-		x = x + self.pe[:x.size(0), :]
-		return self.dropout(x)
+        position = torch.arange(0, max_len).float().unsqueeze(1)
+        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
 
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return self.pe[:, :x.size(1)]
+
+# class PositionalEncoding(nn.Module):
+
+# 	def __init__(self, d_model, dropout=0.1, max_len=26):
+# 		super(PositionalEncoding, self).__init__()
+# 		self.dropout = nn.Dropout(p=dropout)
+
+# 		pe = torch.zeros(max_len, d_model)
+# 		position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+# 		div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+# 		pe[:, 0::2] = torch.sin(position * div_term)
+# 		pe[:, 1::2] = torch.cos(position * div_term)
+# 		pe = pe.unsqueeze(0).transpose(0, 1)
+# 		self.register_buffer('pe', pe)
+
+# 	def forward(self, x):
+# 		x = x + self.pe[:x.size(0), :]
+# 		return self.dropout(x)
