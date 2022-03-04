@@ -14,7 +14,7 @@ class PTVQA(nn.Module):
 		super(PTVQA, self).__init__()
 
 		# Frame feature extractor
-		self.feature_extractor = get_feature_extractor("resnet", h_dim=config.h_dim)
+		self.feature_extractor = get_feature_extractor('resnet', h_dim=config.h_dim)
 		
 		# Video Encoder
 		self.video_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=6, dropout=0.1)
@@ -83,7 +83,18 @@ class ImageFeatureExtractor(nn.Module):
 	def __init__(self):
 		super(ImageFeatureExtractor, self).__init__()
 		
-		self.feature_extractor = get_feature_extractor("resnet", h_dim=config.h_dim)
+		self.feature_extractor = get_feature_extractor('resnet', h_dim=config.h_dim)
+	
+	def forward(self, x):
+		stacked_x = torch.reshape(x, shape=(config.batch_size*config.padded_frame_length, 3, config.image_size[0], config.image_size[1]))
+		stacked_x = self.feature_extractor(stacked_x)
+		x = torch.reshape(stacked_x, shape=(config.batch_size, config.padded_frame_length, -1))
+		return x
+
+class TextFeatureExtractor(nn.Module):
+	def __init__(self):
+		super(TextFeatureExtractor, self).__init__()
+		self.feature_extractor = get_language_encoder('BERT')
 	
 	def forward(self, x):
 		stacked_x = torch.reshape(x, shape=(config.batch_size*config.padded_frame_length, 3, config.image_size[0], config.image_size[1]))

@@ -6,12 +6,13 @@ from transformers import DistilBertModel, DistilBertConfig, DistilBertTokenizer
 import config
 
 class BertEncoder(nn.Module):
-    def __init__(self, h_dim):
+    def __init__(self, h_dim=None):
         super(BertEncoder, self).__init__()
         self.config = DistilBertConfig()
-        self.encoder = DistilBertModel(self.config)#.from_pretrained("distilbert-base-uncased")
+        self.encoder = DistilBertModel(self.config).from_pretrained("distilbert-base-uncased")
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
+        # If mapping to a hidden dimension size, otherwise output will be 768
         if h_dim:
             self.map_to_hid = True
             self.to_hid = nn.Linear(768, h_dim)
@@ -23,7 +24,7 @@ class BertEncoder(nn.Module):
             token_list = []
             mask_list = []
             
-            if transpose_list:
+            if transpose_list: # Transpose the list if the answer list is loaded from a pytroch batch
                 x = list(map(list, zip(*x)))
 
             for current_list in x:
@@ -31,6 +32,7 @@ class BertEncoder(nn.Module):
                 token_list.append(tokens)
                 mask_list.append(masks)
             return torch.stack(token_list), torch.stack(mask_list)
+
         else: # used to tokenize a list of question string
             return self.get_tokens(x, max_length)
 
