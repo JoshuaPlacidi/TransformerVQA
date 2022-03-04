@@ -4,6 +4,9 @@ import torch.nn.functional as F
 
 import math
 
+from transformers import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+import config
+
 class TransformerEncoder(nn.Module):
 	'''
 	Transformer encoder
@@ -23,13 +26,29 @@ class TransformerEncoder(nn.Module):
 
 		# TODO
 		self.segment_embedding = nn.Embedding(3, h_dim)
-		self.pair_idx=[(0, 20), (20, 34), (34, 42)]
 
 		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers, norm=self.layer_norm)
+ 
+	def forward(self, x, segment_mapping=None):
+		# TODO is this correct?
+		if segment_mapping:
+			emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
+			emb_1 = self.segment_embedding(torch.tensor(1).long().to(config.device)).unsqueeze(0)
+			emb_2 = self.segment_embedding(torch.tensor(2).long().to(config.device)).unsqueeze(0)
 
-	def forward(self, x):
-		# TODO is this correct?	
-		x = x + torch.cat([self.pos_encoder(x[:, ini:fin]) + self.segment_embedding(x[:, ini:fin]) for ini, fin in (self.pair_idx)])
+
+			i_encodings = self.pos_encoder(x[:, 0:20]) + emb_0.repeat(20, 1)
+			q_encodings = self.pos_encoder(x[:, 20:34]) + emb_1.repeat(14, 1)
+			a_encodings = self.pos_encoder(x[:, 34:]) + emb_2.repeat(8, 1)
+
+			encodings = torch.cat([i_encodings, q_encodings, a_encodings], dim=1)
+
+			print(encodings.shape)
+
+		#encodings = 
+		#torch.cat([self.pos_encoder(x[:, ini:fin]) + embs[i].repeat(fin-ini, 1) for i, (ini, fin) in enumerate(self.pair_idx)])
+
+		#print(encodings.shape)
 		
 		# x = self.pos_encoder(x)
 
