@@ -8,6 +8,50 @@ import pandas as pd
 import config
 import os
 import numpy as np
+import pickle
+
+class vqa_preproc(Dataset):
+	def __init__(self, image_folder, qa_folder, annotation_file, mode="train"):
+		self.annotations = pd.read_csv(annotation_file)
+		self.image_folder_path = image_folder
+		self.qa_folder_path = qa_folder
+		self.mode = mode
+
+	def __len__(self):
+		return self.annotations.shape[0]
+
+	def __getitem__(self, idx):
+		sample = self.annotations.iloc[[idx]]
+		image_name = sample["gif_name"].item()
+
+		image_path = os.path.join(self.image_folder_path, image_name)+".pkl"
+		qa_path = os.path.join(self.qa_folder_path, image_name)+".pkl"
+
+		with open(image_path, "rb") as handle:
+			image_data = pickle.load(handle)
+
+		with open(qa_path, "rb") as handle:
+			qa_data = pickle.load(handle)
+
+
+		def index_to_tensor(index, total_length):
+			return torch.cat([torch.ones(index), torch.zeros(total_length-index)])
+
+		ret = []
+
+		image_tensor = image_data["tensor"]
+		image_mask = index_to_tensor(image_data["mask_i"], len(image_tensor))
+
+		ret.append(image_tensor)
+		ret.append(image_mask)
+
+		for c in ["question", "a1", "a2", "a3", "a4", "a5"]:
+			tensor = qa_data[c]
+			mask = index_to_tensor(qa_data[f"{c}_mask_idx"], len(tensor))
+			ret.append(tensor)
+			ret.append(mask)
+	
+		return ret
 
 class text_preproc(Dataset):
 	def __init__(self, annotation_file, mode="train"):
@@ -136,7 +180,7 @@ def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
 		return DataLoader(
 			text_preproc(annotation_file),
 			batch_size=config.batch_size,
-			shuffle=False,
+			shuffle=True,
 			num_workers=0)
 
 	else:
