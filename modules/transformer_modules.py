@@ -32,6 +32,13 @@ class TransformerEncoder(nn.Module):
 	def forward(self, x, segment_mapping=None):
 		# TODO is this correct?
 		if segment_mapping:
+			def generate_segment_embedding(label, num_repeat):
+				return self.segment_embedding(torch.tensor(label).long().to(config.device)).unsqueeze(0).repeat(num_repeat, 1)
+
+			return torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
+
+			
+
 			emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
 			emb_1 = self.segment_embedding(torch.tensor(1).long().to(config.device)).unsqueeze(0)
 			emb_2 = self.segment_embedding(torch.tensor(2).long().to(config.device)).unsqueeze(0)
