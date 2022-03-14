@@ -5,7 +5,7 @@ from torchvision import models
 class ResNet(nn.Module):
 	def __init__(self, h_dim):
 		super(ResNet, self).__init__()
-		self.resnet = models.resnet18(pretrained=False)
+		self.resnet = models.resnet18(pretrained=True)
 		self.resnet = torch.nn.Sequential(*(list(self.resnet.children())[:-1]))
 		#self.to_hid = nn.Linear(512, h_dim)
 	

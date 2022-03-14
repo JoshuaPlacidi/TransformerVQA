@@ -10,15 +10,18 @@ import os
 import numpy as np
 import pickle
 
-class vqa_preproc(Dataset):
-	def __init__(self, image_folder, qa_folder, annotation_file, mode="train"):
+class TGIF_Dataset(Dataset):
+	def __init__(self, dataset_folder, annotation_file, mode="train"):
 		self.annotations = pd.read_csv(annotation_file)
-		self.image_folder_path = image_folder
-		self.qa_folder_path = qa_folder
+		self.image_folder_path = dataset_folder + 'tgif_image_features/'
+		self.qa_folder_path = dataset_folder + 'tgif_text_features/'
 		self.mode = mode
 
 	def __len__(self):
 		return self.annotations.shape[0]
+
+	def index_to_tensor(self, index, total_length):
+		return torch.cat([torch.ones(index), torch.zeros(total_length-index)])
 
 	def __getitem__(self, idx):
 		sample = self.annotations.iloc[[idx]]
@@ -34,23 +37,34 @@ class vqa_preproc(Dataset):
 			qa_data = pickle.load(handle)
 
 
-		def index_to_tensor(index, total_length):
-			return torch.cat([torch.ones(index), torch.zeros(total_length-index)])
-
 		ret = []
 
 		image_tensor = image_data["tensor"]
-		image_mask = index_to_tensor(image_data["mask_i"], len(image_tensor))
+		image_mask = self.index_to_tensor(image_data["mask"], len(image_tensor))
 
 		ret.append(image_tensor)
 		ret.append(image_mask)
 
-		for c in ["question", "a1", "a2", "a3", "a4", "a5"]:
+
+		question_tensor = qa_data['question']
+		question_mask = self.index_to_tensor(qa_data['question_mask_idx'], question_tensor.shape[0])
+
+		ret.append(question_tensor)
+		ret.append(question_mask)
+
+		answers = []
+		answer_masks = []
+		for c in ["a1", "a2", "a3", "a4", "a5"]:
 			tensor = qa_data[c]
-			mask = index_to_tensor(qa_data[f"{c}_mask_idx"], len(tensor))
-			ret.append(tensor)
-			ret.append(mask)
-	
+			a_mask = self.index_to_tensor(qa_data[f"{c}_mask_idx"], len(tensor))
+			answers.append(tensor)
+			answer_masks.append(a_mask)
+
+		ret.append(torch.stack(answers))
+		ret.append(torch.stack(answer_masks))
+
+		ret.append(sample['answer'].item()) # ground truth
+
 		return ret
 
 class text_preproc(Dataset):
@@ -110,68 +124,18 @@ class GIF_preproc(Dataset):
 		return image_name, image_frames, masking_idx
 
 
-class TGIF_dataset(Dataset):
-	def __init__(self, image_folder, annotation_file, mode="train"):
-		self.annotations = pd.read_csv(annotation_file, sep='\t', header=0)
-		self.image_folder_path = image_folder
-		self.to_tensor = transforms.ToTensor()
-		self.resize = transforms.Resize(config.image_size)
-		self.mode = mode
-
-	def __len__(self):
-		return self.annotations.shape[0]
-
-	def get_image_frames(self, path):
-		gif = Image.open(path)
-		# We can access the number of frames using gif.n_frames 
-		image_list = []
-
-		# Calculation to account for different numbers of frames and how frames should be 'skipped'
-		step = 1 if gif.n_frames < config.padded_frame_length else gif.n_frames/config.padded_frame_length		
-		for f in np.arange(0, gif.n_frames, step):
-			gif.seek(int(f))
-			frame = self.resize(gif).convert('RGB')
-			image_tensor = self.to_tensor(frame).squeeze()
-			image_list.append(image_tensor)
-
-		# Check if we need to pad
-		needed_padding = config.padded_frame_length - len(image_list)
-
-		# Add empty images if needed
-		image_list.extend([torch.zeros_like(image_tensor) for _ in range(needed_padding)])
-
-		# Create the mask
-		mask = torch.cat([torch.ones(len(image_list)), torch.zeros(needed_padding)])
-
-		return torch.stack(image_list)
-
-	def __getitem__(self, idx):
-		sample = self.annotations.iloc[[idx]]
-		image_path = sample["gif_name"].item()
-		question = sample['question'].item()
-		ground_truth = sample['answer'].item()
-		answer_choices = [sample[f'a{i}'].item() for i in range(1,6)]
-
-		# image_path = self.image_folder_path + 'test.gif' # TODO: self.image_folder_path + sample['gif_name'].iloc[0] + '.gif'
-
-		# t = time.process_time()
-		image_frames = self.get_image_frames(os.path.join(self.image_folder_path, image_path)+".gif") # TODO: avoid calculating the gif frames here, instead should be done for every gif in init()
-		# self.time += time.process_time() - t
-		# print(self.time)
-
-		return image_frames, question, answer_choices, ground_truth
-
-def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
-	if not (image_folder and annotation_file) and data_source=="TGIF":
+def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
+	if not (dataset_folder and annotation_file) and data_source=="TGIF":
 		raise Exception("Both image_folder and annotation_file location are required, 1 or both not passed")
 
 	modes = ["train", "val", "test"]
 
 	if data_source=="TGIF":
-		dataset_class = TGIF_dataset
+		dataset_class = TGIF_Dataset
+
 	elif data_source=="GIF_preproc":
 		return DataLoader(
-			GIF_preproc(image_folder),
+			GIF_preproc(dataset_folder),
 			batch_size=config.batch_size,
 			shuffle=True,
 			num_workers=0)
@@ -187,9 +151,66 @@ def get_dataset(data_source="TGIF", image_folder=None, annotation_file=None):
 		raise Exception("data source not recognised:", data_source)
 
 	return [DataLoader(
-		dataset_class(image_folder, annotation_file, mode),
+		dataset_class(dataset_folder, annotation_file, mode),
 		batch_size=config.batch_size,
 		shuffle=True,
 		num_workers=0) 
 		for mode in modes]
 
+
+
+
+#
+# TGIF dataset that calculates encodings for each image and text at run time
+#
+
+# class old_TGIF_dataset(Dataset):
+# 	def __init__(self, image_folder, annotation_file, mode="train"):
+# 		self.annotations = pd.read_csv(annotation_file, sep='\t', header=0)
+# 		self.image_folder_path = image_folder
+# 		self.to_tensor = transforms.ToTensor()
+# 		self.resize = transforms.Resize(config.image_size)
+# 		self.mode = mode
+
+# 	def __len__(self):
+# 		return self.annotations.shape[0]
+
+# 	def get_image_frames(self, path):
+# 		gif = Image.open(path)
+# 		# We can access the number of frames using gif.n_frames 
+# 		image_list = []
+
+# 		# Calculation to account for different numbers of frames and how frames should be 'skipped'
+# 		step = 1 if gif.n_frames < config.padded_frame_length else gif.n_frames/config.padded_frame_length		
+# 		for f in np.arange(0, gif.n_frames, step):
+# 			gif.seek(int(f))
+# 			frame = self.resize(gif).convert('RGB')
+# 			image_tensor = self.to_tensor(frame).squeeze()
+# 			image_list.append(image_tensor)
+
+# 		# Check if we need to pad
+# 		needed_padding = config.padded_frame_length - len(image_list)
+
+# 		# Add empty images if needed
+# 		image_list.extend([torch.zeros_like(image_tensor) for _ in range(needed_padding)])
+
+# 		# Create the mask
+# 		mask = torch.cat([torch.ones(len(image_list)), torch.zeros(needed_padding)])
+
+# 		return torch.stack(image_list)
+
+	# def __getitem__(self, idx):
+	# 	sample = self.annotations.iloc[[idx]]
+	# 	image_path = sample["gif_name"].item()
+	# 	question = sample['question'].item()
+	# 	ground_truth = sample['answer'].item()
+	# 	answer_choices = [sample[f'a{i}'].item() for i in range(1,6)]
+
+	# 	# image_path = self.image_folder_path + 'test.gif' # TODO: self.image_folder_path + sample['gif_name'].iloc[0] + '.gif'
+
+	# 	# t = time.process_time()
+	# 	image_frames = self.get_image_frames(os.path.join(self.image_folder_path, image_path)+".gif") # TODO: avoid calculating the gif frames here, instead should be done for every gif in init()
+	# 	# self.time += time.process_time() - t
+	# 	# print(self.time)
+
+	# 	return image_frames, question, answer_choices, ground_truth

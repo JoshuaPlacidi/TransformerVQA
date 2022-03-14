@@ -35,22 +35,22 @@ class TransformerEncoder(nn.Module):
 			def generate_segment_embedding(label, num_repeat):
 				return self.segment_embedding(torch.tensor(label).long().to(config.device)).unsqueeze(0).repeat(num_repeat, 1)
 
-			return torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
+			x = x + torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
 
 			
 
-			emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
-			emb_1 = self.segment_embedding(torch.tensor(1).long().to(config.device)).unsqueeze(0)
-			emb_2 = self.segment_embedding(torch.tensor(2).long().to(config.device)).unsqueeze(0)
+			# emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
+			# emb_1 = self.segment_embedding(torch.tensor(1).long().to(config.device)).unsqueeze(0)
+			# emb_2 = self.segment_embedding(torch.tensor(2).long().to(config.device)).unsqueeze(0)
 
 
-			i_encodings = self.pos_encoder(x[:, 0:20]) + emb_0.repeat(20, 1)
-			q_encodings = self.pos_encoder(x[:, 20:34]) + emb_1.repeat(14, 1)
-			a_encodings = self.pos_encoder(x[:, 34:]) + emb_2.repeat(8, 1)
+			# i_encodings = self.pos_encoder(x[:, 0:20]) + emb_0.repeat(20, 1)
+			# q_encodings = self.pos_encoder(x[:, 20:34]) + emb_1.repeat(14, 1)
+			# a_encodings = self.pos_encoder(x[:, 34:]) + emb_2.repeat(8, 1)
 
-			encodings = torch.cat([i_encodings, q_encodings, a_encodings], dim=1)
+			# encodings = torch.cat([i_encodings, q_encodings, a_encodings], dim=1)
 
-			print(encodings.shape)
+			# print(encodings.shape)
 
 		#encodings = 
 		#torch.cat([self.pos_encoder(x[:, ini:fin]) + embs[i].repeat(fin-ini, 1) for i, (ini, fin) in enumerate(self.pair_idx)])
