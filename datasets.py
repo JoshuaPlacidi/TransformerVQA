@@ -10,6 +10,33 @@ import os
 import numpy as np
 import pickle
 
+class IQA_Dataset(Dataset):
+	def __init__(self, dataset_folder, annotation_file, mode="train"):
+		self.annotations = pd.read_csv(annotation_file)
+		self.image_folder_path = dataset_folder + 'train2014/'
+		self.mode = mode
+		self.resize = transforms.Resize(config.image_size)
+		self.to_tensor = transforms.ToTensor()
+
+
+	def __len__(self):
+		return self.annotations.shape[0]
+
+	def __getitem__(self, idx):
+		sample = self.annotations.iloc[[idx]]
+		image_name = str(sample["image_id"].item())
+		image_full_name = "COCO_train2014_"+"0"*(12-len(image_name)) + image_name + "jpg"
+		
+		image_path = os.path.join(self.image_folder_path, image_full_name)
+
+		image = Image.open(image_path)
+
+		image_tensor = self.to_tensor(self.resize(image))
+		
+		ret = image_tensor + [sample[f"a_{i}"].item() for i in range(5)] + [sample["ground_truth"].item()]
+
+		return ret
+
 class TGIF_Dataset(Dataset):
 	def __init__(self, dataset_folder, annotation_file, mode="train"):
 		self.annotations = pd.read_csv(annotation_file)
@@ -132,6 +159,14 @@ def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
 
 	if data_source=="TGIF":
 		dataset_class = TGIF_Dataset
+
+	elif data_source=="IQA":
+		return DataLoader(
+			IQA_Dataset(dataset_folder, annotation_file),
+			batch_size=config.batch_size,
+			shuffle=True,
+			num_workers=0)
+
 
 	elif data_source=="GIF_preproc":
 		return DataLoader(
