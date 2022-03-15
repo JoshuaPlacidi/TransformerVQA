@@ -3,7 +3,7 @@ from tqdm import tqdm
 import config
 import time
 
-# TODO Finish implementing training loop
+
 def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 	import torch.optim as optim
 	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
@@ -23,24 +23,23 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 		b = 0
 		for batch in pbar:
 			b+=1
-			batch = [t.to(config.device) for t in batch]
-			ground_truths = batch[-1]
+			batch = [t.squeeze().to(config.device) for t in batch]
+			ground_truths = batch[-1].to(config.device)
 			predictions = model(*batch[:-1])
 
 			loss = criterion(predictions, ground_truths)
-
 			correct_samples += calculate_correct(predictions, ground_truths)
 			total_samples += ground_truths.shape[0]
 			
 			model.zero_grad()
 			loss.backward()
+			torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
 			optimizer.step()
 
 			epoch_running_loss += loss.item()
 
 			print('epoch accuracy:', (correct_samples / total_samples).item())
 			print('epoch avg loss:', round(epoch_running_loss / b , 8))
-
 
 def calculate_correct(predictions, ground_truths):
 	p = torch.argmax(predictions, dim=1)

@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 
 from PIL import Image
 from PIL import ImageFile
+from modules.language_encoder import get_language_encoder
 import pandas as pd
 import config
 import os
@@ -16,7 +17,9 @@ class IQA_Dataset(Dataset):
 		self.image_folder_path = dataset_folder + 'train2014/'
 		self.mode = mode
 		self.resize = transforms.Resize(config.image_size)
+		self.norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 		self.to_tensor = transforms.ToTensor()
+		self.tokenize = get_language_encoder().tokenize_text
 
 
 	def __len__(self):
@@ -25,17 +28,30 @@ class IQA_Dataset(Dataset):
 	def __getitem__(self, idx):
 		sample = self.annotations.iloc[[idx]]
 		image_name = str(sample["image_id"].item())
-		image_full_name = "COCO_train2014_"+"0"*(12-len(image_name)) + image_name + "jpg"
+		image_full_name = "COCO_train2014_"+"0"*(12-len(image_name)) + image_name + ".jpg"
 		
 		image_path = os.path.join(self.image_folder_path, image_full_name)
 
-		image = Image.open(image_path)
+		image = Image.open(image_path).convert('RGB')
 
-		image_tensor = self.to_tensor(self.resize(image))
+		image_tensor = self.norm(self.to_tensor(self.resize(image)))
 		
-		ret = image_tensor + [sample[f"a_{i}"].item() for i in range(5)] + [sample["ground_truth"].item()]
+		question_tokens, question_mask = self.tokenize(sample['question'].item(), max_length=10)
 
-		return ret
+		answer_list = []
+		answer_tokens_list = []
+		answer_masks_list = []
+
+		for i in range(5):
+			answer_list.append(sample[f"a_{i}"].item())
+			answer_tokens, answer_mask = self.tokenize(answer_list[-1], max_length=10)
+			answer_tokens_list.append(answer_tokens)
+			answer_masks_list.append(answer_mask)
+
+		answer_tokens = torch.stack(answer_tokens_list)
+		answer_masks = torch.stack(answer_masks_list)
+
+		return image_tensor, question_tokens, question_mask, answer_tokens, answer_masks, answer_list.index(sample["ground_truth"].item())
 
 class TGIF_Dataset(Dataset):
 	def __init__(self, dataset_folder, annotation_file, mode="train"):

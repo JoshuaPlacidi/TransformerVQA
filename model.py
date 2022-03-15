@@ -78,6 +78,66 @@ class PTVQA(nn.Module):
 
 		return vqa
 
+class IQA(nn.Module):
+	def __init__(self):
+		super(IQA, self).__init__()
+
+		# Frame feature extractor
+		self.feature_extractor = get_feature_extractor('resnet', h_dim=config.h_dim)
+		
+		# Language Encoder
+		self.language_encoder = get_language_encoder()
+
+		self.iqa_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=6, dropout=0.1)
+
+		self.lan_to_hid = nn.Linear(768, config.h_dim)
+		self.hid_to_one = nn.Linear(config.h_dim, 1)
+		self.softmax = nn.Softmax(dim=1)
+
+	def forward(self, i, q, q_mask, a, a_mask):
+		i = self.feature_extractor(i)
+
+
+		# Calculate q
+		q = self.language_encoder(q, q_mask)
+		q = self.lan_to_hid(q)
+
+		# Calculate a
+		stacked_a_tokens = torch.reshape(a, shape=(i.shape[0]*a.shape[1], -1))
+		stacked_a_masks = torch.reshape(a_mask, shape=(i.shape[0]*a.shape[1], -1))
+
+		#print(stacked_a_tokens.shape)
+		stacked_answer_features = self.language_encoder(stacked_a_tokens, stacked_a_masks)
+		a = torch.reshape(stacked_answer_features, shape=(i.shape[0], 5, 10, -1))
+		#print(a.shape)
+		a = self.lan_to_hid(a)
+
+		#print(a[0])
+
+		#
+		# Multi-Modal Combination
+		#
+		i = i.unsqueeze(1).unsqueeze(1)
+		i = i.repeat(1,5,1,1)
+		q = q.unsqueeze(1)
+		q = q.repeat(1,5,1,1)
+
+	
+		iqa = torch.cat((i,q,a), dim=2)
+
+		stacked_iqa = torch.reshape(iqa, shape=(i.shape[0] * 5, -1, config.h_dim))
+		stacked_iqa = self.iqa_encoder(stacked_iqa, [(0, 1), (1, 11), (11, 21)])
+		iqa = torch.reshape(stacked_iqa, shape=(i.shape[0], 5, -1, config.h_dim))
+
+		iqa = self.hid_to_one(iqa)
+		iqa = iqa[:,:,0,:].squeeze()
+		iqa = self.softmax(iqa)
+
+		return iqa
+
+def get_IQA():
+	return IQA()
+
 def get_PTVQA():
 	return PTVQA()
 
