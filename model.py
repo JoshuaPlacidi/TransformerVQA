@@ -95,16 +95,17 @@ class IQA(nn.Module):
 		self.softmax = nn.Softmax(dim=1)
 
 	def forward(self, i, q, q_mask, a, a_mask):
-		i = self.feature_extractor(i)
+		i = self.feature_extractor(i) # [batch_size, 512] -> Output of resnet
 
 
 		# Calculate q
-		q = self.language_encoder(q, q_mask)
-		q = self.lan_to_hid(q)
+		q = self.language_encoder(q, q_mask) # [batch_size, config.question_length, 768 (bert)]
+		# TODO: We are destroying everything bert has done??
+		q = self.lan_to_hid(q) # [batch_size, config.question_length, config.h_dim]
 
 		# Calculate a
-		stacked_a_tokens = torch.reshape(a, shape=(i.shape[0]*a.shape[1], -1))
-		stacked_a_masks = torch.reshape(a_mask, shape=(i.shape[0]*a.shape[1], -1))
+		stacked_a_tokens = torch.reshape(a, shape=(a.shape[0]*a.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
+		stacked_a_masks = torch.reshape(a_mask, shape=(a_mask.shape[0]*a_mask.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
 
 		#print(stacked_a_tokens.shape)
 		stacked_answer_features = self.language_encoder(stacked_a_tokens, stacked_a_masks)
