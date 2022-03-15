@@ -8,9 +8,13 @@ import config
 class BertEncoder(nn.Module):
     def __init__(self, h_dim=None):
         super(BertEncoder, self).__init__()
-        self.config = DistilBertConfig()
-        self.encoder = DistilBertModel(self.config).from_pretrained("distilbert-base-uncased")
-        self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        # self.config = DistilBertConfig()
+        # self.encoder = DistilBertModel(self.config).from_pretrained("distilbert-base-uncased")
+        # self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+
+        self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        
+        self.encoder = None
 
         # If mapping to a hidden dimension size, otherwise output will be 768
         if h_dim:
@@ -39,9 +43,12 @@ class BertEncoder(nn.Module):
     def get_tokens(self, x, max_length):
         tokenizer_output = self.tokenizer(x, max_length=max_length, padding="max_length", truncation=True, return_tensors="pt")
         tokens, masks = tokenizer_output['input_ids'], tokenizer_output['attention_mask']
-        return tokens, masks
+        return tokens, masks #[1, max_length]
 
     def forward(self, tokens, masks=None):
+        if self.encoder is None:
+            self.encoder = DistilBertModel.from_pretrained('distilbert-base-uncased')
+
         x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
         
         if self.map_to_hid:
@@ -49,5 +56,7 @@ class BertEncoder(nn.Module):
 
         return x
 
+bert_encoder = BertEncoder(h_dim=None)
+
 def get_language_encoder(encoder_source='BERT', h_dim=None):
-    return BertEncoder(h_dim)
+    return bert_encoder
