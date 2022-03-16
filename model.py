@@ -88,48 +88,43 @@ class IQA(nn.Module):
 		# Language Encoder
 		self.language_encoder = get_language_encoder()
 
-		self.iqa_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=6, dropout=0.1)
+		self.iqa_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=6, dropout=0)
 
 		self.lan_to_hid = nn.Linear(768, config.h_dim)
 		self.hid_to_one = nn.Linear(config.h_dim, 1)
 		self.softmax = nn.Softmax(dim=1)
 
 	def forward(self, i, q, q_mask, a, a_mask):
-		i = self.feature_extractor(i) # [batch_size, 512] -> Output of resnet
-
-
+		i_new = self.feature_extractor(i) # [batch_size, 512] -> Output of resnet
 		# Calculate q
-		q = self.language_encoder(q, q_mask) # [batch_size, config.question_length, 768 (bert)]
+		q_encoded = self.language_encoder(q, q_mask) # [batch_size, config.question_length, 768 (bert)]
 		# TODO: We are destroying everything bert has done??
-		q = self.lan_to_hid(q) # [batch_size, config.question_length, config.h_dim]
+		q_encoded_hid = self.lan_to_hid(q_encoded) # [batch_size, config.question_length, config.h_dim]
 
 		# Calculate a
 		stacked_a_tokens = torch.reshape(a, shape=(a.shape[0]*a.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
 		stacked_a_masks = torch.reshape(a_mask, shape=(a_mask.shape[0]*a_mask.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
 
-		#print(stacked_a_tokens.shape)
-		stacked_answer_features = self.language_encoder(stacked_a_tokens, stacked_a_masks)
-		a = torch.reshape(stacked_answer_features, shape=(i.shape[0], 5, 10, -1))
-		#print(a.shape)
-		a = self.lan_to_hid(a)
+		stacked_answer_features = self.language_encoder(stacked_a_tokens, stacked_a_masks) # [batch_size * number_answers, padded_language_length_answer, 768 (bert)]
 
-		#print(a[0])
+		a = torch.reshape(stacked_answer_features, shape=(i.shape[0], 5, config.padded_language_length_answer, -1)) # [batch_size, number_answers, padded_language_length_answer, 768 (bert)]
+		a = self.lan_to_hid(a) # [batch_size, number_answers, padded_language_length_answer, config.hdim]
 
 		#
 		# Multi-Modal Combination
 		#
-		i = i.unsqueeze(1).unsqueeze(1)
-		i = i.repeat(1,5,1,1)
-		q = q.unsqueeze(1)
-		q = q.repeat(1,5,1,1)
-
+		i_new = i_new.unsqueeze(1).unsqueeze(1) # [batch_size, 1, 1, 512] -> Output of resnet
+		i_new = i_new.repeat(1,5,1,1) # [batch_size, number_answers, 1, 512] -> Output of resnet
+		q_encoded_hid_unsqueeze = q_encoded_hid.unsqueeze(1) # [batch_size, 1, config.question_length, config.h_dim]
+		q_encoded_hid_repeat = q_encoded_hid_unsqueeze.repeat(1,5,1,1) # [batch_size, 5, config.question_length, config.h_dim]
 	
-		iqa = torch.cat((i,q,a), dim=2)
+		iqa = torch.cat((i_new,q_encoded_hid_repeat,a), dim=2) # [batch_size, 5, 1 + config.question_length + padded_language_length_answer, config.h_dim]
 
-		stacked_iqa = torch.reshape(iqa, shape=(i.shape[0] * 5, -1, config.h_dim))
-		stacked_iqa = self.iqa_encoder(stacked_iqa, [(0, 1), (1, 11), (11, 21)])
-		iqa = torch.reshape(stacked_iqa, shape=(i.shape[0], 5, -1, config.h_dim))
+		stacked_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
+		stacked_iqa = self.iqa_encoder(stacked_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)])
+		iqa = torch.reshape(stacked_iqa, shape=(i_new.shape[0], 5, -1, config.h_dim))
 
+		# Is this really what we want?? I though we wanted to take the first token or something, not the whole thing
 		iqa = self.hid_to_one(iqa)
 		iqa = iqa[:,:,0,:].squeeze()
 		iqa = self.softmax(iqa)
