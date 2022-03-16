@@ -19,7 +19,7 @@ class IQA_Dataset(Dataset):
 		self.resize = transforms.Resize(config.image_size)
 		self.norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 		self.to_tensor = transforms.ToTensor()
-		self.tokenize = get_language_encoder().tokenize_text
+		self.tokenize = BertTokenizer().tokenize_text
 
 
 	def __len__(self):
