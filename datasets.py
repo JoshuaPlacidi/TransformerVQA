@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 
 from PIL import Image
 from PIL import ImageFile
-from modules.language_encoder import get_language_encoder
+from modules.language_encoder import get_language_encoder, BertTokenizer
 import pandas as pd
 import config
 import os
@@ -34,17 +34,20 @@ class IQA_Dataset(Dataset):
 
 		image = Image.open(image_path).convert('RGB')
 
-		image_tensor = self.norm(self.to_tensor(self.resize(image)))
+		image_tensor = self.norm(self.to_tensor(self.resize(image))) # [3, config.image_size, config.image_size]
 		
-		question_tokens, question_mask = self.tokenize(sample['question'].item(), max_length=10)
+		# question_tokens [1, config.padded_language_length_question]
+		# question_mask [1, config.padded_language_length_question]
+		question_tokens, question_mask = self.tokenize(sample['question'].item(), max_length=config.padded_language_length_question)
 
 		answer_list = []
 		answer_tokens_list = []
 		answer_masks_list = []
 
 		for i in range(5):
-			answer_list.append(sample[f"a_{i}"].item())
-			answer_tokens, answer_mask = self.tokenize(answer_list[-1], max_length=10)
+			current_answer = sample[f"a_{i}"].item()
+			answer_list.append(current_answer)
+			answer_tokens, answer_mask = self.tokenize(current_answer, max_length=config.padded_language_length_answer)
 			answer_tokens_list.append(answer_tokens)
 			answer_masks_list.append(answer_mask)
 
@@ -180,7 +183,7 @@ def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
 		return DataLoader(
 			IQA_Dataset(dataset_folder, annotation_file),
 			batch_size=config.batch_size,
-			shuffle=True,
+			shuffle=False,
 			num_workers=0)
 
 

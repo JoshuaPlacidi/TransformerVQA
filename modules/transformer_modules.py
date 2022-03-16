@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import math
-
-from transformers import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 import config
 
 class TransformerEncoder(nn.Module):
