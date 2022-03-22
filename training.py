@@ -3,6 +3,7 @@ from tqdm import tqdm
 import config
 import time
 
+from transformers import DistilBertTokenizer, DistilBertModel
 
 def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 	import torch.optim as optim
@@ -10,36 +11,43 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 	criterion = torch.nn.CrossEntropyLoss()
 	model.to(config.device)
 
-	
+	model.train()
+	# model.language_encoder.encoder.eval()
+
 	for epoch in range(num_epochs):
 		epoch_running_loss = 0
 
 		total_samples = 0
 		correct_samples = 0
 
-		model.train()
 		pbar = tqdm(train_dataset)
 		pbar.set_description("Epoch %s" % epoch)
 		b = 0
+
 		for batch in pbar:
 			b+=1
 			batch = [t.squeeze().to(config.device) for t in batch]
 			ground_truths = batch[-1].to(config.device)
 			predictions = model(*batch[:-1])
+			# print(predictions)
 
 			loss = criterion(predictions, ground_truths)
-			correct_samples += calculate_correct(predictions, ground_truths)
+			correct_samples += calculate_correct(predictions, ground_truths).item()
 			total_samples += ground_truths.shape[0]
 			
-			model.zero_grad()
 			loss.backward()
-			torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
+			# torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
 			optimizer.step()
 
 			epoch_running_loss += loss.item()
+			model.zero_grad()
+			# tqdm.write(f'{correct_samples}')
+			# tqdm.write(f'{total_samples}')
 
-			print('epoch accuracy:', (correct_samples / total_samples).item())
-			print('epoch avg loss:', round(epoch_running_loss / b , 8))
+			if b%5 == 0:
+				tqdm.write(f'epoch avg loss: {round(epoch_running_loss / b , 8)}    epoch accuracy: {correct_samples / total_samples}')
+
+
 
 def calculate_correct(predictions, ground_truths):
 	p = torch.argmax(predictions, dim=1)
