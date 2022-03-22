@@ -33,9 +33,11 @@ class TransformerEncoder(nn.Module):
 			def generate_segment_embedding(label, num_repeat):
 				return self.segment_embedding(torch.tensor(label).long().to(config.device)).unsqueeze(0).repeat(num_repeat, 1)
 
-			x = x + torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
+			pos_and_segment_embedding = torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
+			new_x = x + pos_and_segment_embedding
 
-			
+			x = self.encoder(new_x)
+			return x
 
 			# emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
 			# emb_1 = self.segment_embedding(torch.tensor(1).long().to(config.device)).unsqueeze(0)
@@ -87,8 +89,15 @@ class TransformerEncoderLayer(nn.Module):
 		super(TransformerEncoderLayer, self).__setstate__(state)
 
 	def forward(self, src, src_mask = None, src_key_padding_mask = None):
+		# src.shape == [batch_size*5, 21, 512]
+		# src[0] == src[1] True for the 15 first elements (makes sense, just image and question, and different for answers)
+
 		src2 = self.self_attn(src, src, src, attn_mask=src_mask,
 							  key_padding_mask=src_key_padding_mask)[0]
+		# TODO
+		# src2[0][:15] == src2[1][:15] ALL TRUE. Attention is the same??? makes no sense
+
+
 		src = self.norm1(src)
 		src = src + self.dropout1(src2)
 		src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))

@@ -118,18 +118,26 @@ class IQA(nn.Module):
 		q_encoded_hid_unsqueeze = q_encoded_hid.unsqueeze(1) # [batch_size, 1, config.question_length, config.h_dim]
 		q_encoded_hid_repeat = q_encoded_hid_unsqueeze.repeat(1,5,1,1) # [batch_size, 5, config.question_length, config.h_dim]
 	
+		# iqa[0][0][15:] == iqa[0][1][15:] All false (makes sense, padded_language_length is the part that differs)
 		iqa = torch.cat((i_new,q_encoded_hid_repeat,a), dim=2) # [batch_size, 5, 1 + config.question_length + padded_language_length_answer, config.h_dim]
 
-		stacked_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
-		stacked_iqa = self.iqa_encoder(stacked_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)])
-		iqa = torch.reshape(stacked_iqa, shape=(i_new.shape[0], 5, -1, config.h_dim))
+		# iqa[0][1] == reshaped_iqa[1] All true. Makes sense
+		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
+
+
+		stacked_iqa = self.iqa_encoder(reshaped_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)])
+		iqa_encoded = torch.reshape(stacked_iqa, shape=(i_new.shape[0], 5, -1, config.h_dim))
 
 		# Is this really what we want?? I though we wanted to take the first token or something, not the whole thing
-		iqa = self.hid_to_one(iqa)
-		iqa = iqa[:,:,0,:].squeeze()
-		iqa = self.softmax(iqa)
+		# iqa_encoded[0][0][:15] == iqa_encoded[0][1][:15] all true
+		iqa_encoded_linear = self.hid_to_one(iqa_encoded)
 
-		return iqa
+		# [batch_size, 5, 1 + config.question_length + padded_language_length_answer, 1]
+		iqa_encoded_linear_squeeze = iqa_encoded_linear[:,:,16,:].squeeze() # For each sample, all the values are the same
+		
+		output = self.softmax(iqa_encoded_linear_squeeze)
+
+		return output
 
 def get_IQA():
 	return IQA()
