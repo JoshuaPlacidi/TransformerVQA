@@ -70,7 +70,7 @@ class TransformerEncoderLayer(nn.Module):
 
 	def __init__(self, h_dim, ff_dim, num_heads, dropout=0.1, activation="relu"):
 		super(TransformerEncoderLayer, self).__init__()
-		self.self_attn = nn.MultiheadAttention(h_dim, num_heads, dropout=dropout)
+		self.self_attn = nn.MultiheadAttention(h_dim, num_heads, dropout=dropout, batch_first=True)
 		# Implementation of Feedforward model
 		self.linear1 = nn.Linear(h_dim, ff_dim)
 		self.dropout = nn.Dropout(dropout)

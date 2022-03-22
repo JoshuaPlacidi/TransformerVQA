@@ -133,7 +133,7 @@ class IQA(nn.Module):
 		iqa_encoded_linear = self.hid_to_one(iqa_encoded)
 
 		# [batch_size, 5, 1 + config.question_length + padded_language_length_answer, 1]
-		iqa_encoded_linear_squeeze = iqa_encoded_linear[:,:,16,:].squeeze() # For each sample, all the values are the same
+		iqa_encoded_linear_squeeze = iqa_encoded_linear[:,:,0,:].squeeze() # For each sample, all the values are the same
 		
 		output = self.softmax(iqa_encoded_linear_squeeze)
 
