@@ -3,16 +3,19 @@ from tqdm import tqdm
 import config
 import time
 
-from transformers import DistilBertTokenizer, DistilBertModel
+criterion = torch.nn.CrossEntropyLoss()
 
-def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
+def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 	import torch.optim as optim
 	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
-	criterion = torch.nn.CrossEntropyLoss()
+	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=num_epochs//3, gamma=0.1)
+	
 	model.to(config.device)
 
+	# val_acc = evaluate(model, val_dataset)
+	# print(val_acc)
+
 	model.train()
-	# model.language_encoder.encoder.eval()
 
 	for epoch in range(num_epochs):
 		epoch_running_loss = 0
@@ -29,15 +32,15 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 			batch = [t.squeeze().to(config.device) for t in batch]
 			ground_truths = batch[-1].to(config.device)
 			predictions = model(*batch[:-1])
-			# print(predictions)
 
 			loss = criterion(predictions, ground_truths)
 			correct_samples += calculate_correct(predictions, ground_truths).item()
 			total_samples += ground_truths.shape[0]
 			
 			loss.backward()
-			# torch.nn.utils.clip_grad_norm_(model.parameters(), 2)
+			torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 			optimizer.step()
+			scheduler.step()
 
 			epoch_running_loss += loss.item()
 			model.zero_grad()
@@ -47,6 +50,26 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=10):
 			if b%5 == 0:
 				tqdm.write(f'epoch avg loss: {round(epoch_running_loss / b , 8)}    epoch accuracy: {correct_samples / total_samples}')
 
+def evaluate(model, dataset):
+	model.eval()
+	
+	pbar = tqdm(dataset)
+	pbar.set_description("Evaluating")
+
+	with torch.no_grad():
+
+		for batch in pbar:
+			batch = [t.squeeze().to(config.device) for t in batch]
+			ground_truths = batch[-1].to(config.device)
+			predictions = model(*batch[:-1])
+
+			loss = criterion(predictions, ground_truths)
+			correct_samples += calculate_correct(predictions, ground_truths).item()
+			total_samples += ground_truths.shape[0]
+
+		accuracy = correct_samples/total_samples
+
+		return accuracy
 
 
 def calculate_correct(predictions, ground_truths):
