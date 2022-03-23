@@ -1,5 +1,5 @@
 from tkinter import X
-from jax import mask
+#from jax import mask
 import torch
 import torch.nn as nn
 from transformers import DistilBertModel, DistilBertConfig, DistilBertTokenizer
@@ -58,9 +58,9 @@ class BertEncoder(nn.Module):
     def forward(self, tokens, masks=None):
         # tokens = torch.tensor([[ 101, 2054, 4338, 2003, 1996, 6847, 2835, 1029,  102,    0,    0,    0, 0,    0]])
         # masks = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]])
-        self.encoder.eval()
-        with torch.no_grad():
-            x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
+        #self.encoder.eval()
+        #with torch.no_grad():
+        x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
 
         # print(x)
         if self.map_to_hid:

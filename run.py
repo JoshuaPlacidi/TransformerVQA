@@ -3,21 +3,27 @@ import torch
 import config
 
 from training import train_vqa, gif_preproc, text_preproc
-from model import get_PTVQA, get_ImageFeatureExtractor, get_language_encoder
+from model import get_PTVQA, get_IQA, get_ImageFeatureExtractor, get_language_encoder
 from datasets import get_dataset
 
 #
 # Train VQA
 #
-train_set, val_set, test_set = get_dataset(
-   data_source = "TGIF",
-   dataset_folder = config.tgif_folder_location,
-   annotation_file = config.tgif_folder_location + "action_question_annotations.csv"
+train_dataset, val_dataset = get_dataset(
+   data_source = "IQA",
+   dataset_folder = config.coco_folder_location,
+   annotation_file = config.vqa_annotation_file_location
    )
 
-model = get_PTVQA()
+# train_dataset, val_dataset, _ = get_dataset(
+#    data_source = "TGIF",
+#    dataset_folder = config.tgif_folder_location,
+#    annotation_file = config.tgif_folder_location + '/action_question_annotations.csv'
+#    )
 
-train_vqa(model, train_set, num_epochs=100)
+model = get_IQA()
+
+train_vqa(model, train_dataset=train_dataset, val_dataset=val_dataset, num_epochs=100)
 
 #
 # Gif preproc

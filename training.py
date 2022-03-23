@@ -8,27 +8,25 @@ criterion = torch.nn.CrossEntropyLoss()
 def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 	import torch.optim as optim
 	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
-	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=num_epochs//3, gamma=0.1)
+	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=num_epochs//4, gamma=0.1)
 	
 	model.to(config.device)
 
-	# val_acc = evaluate(model, val_dataset)
-	# print(val_acc)
-
-	model.train()
-
+	best_val_loss = 10
 	for epoch in range(num_epochs):
+		model.train()
+
 		epoch_running_loss = 0
 
 		total_samples = 0
 		correct_samples = 0
 
 		pbar = tqdm(train_dataset)
-		pbar.set_description("Epoch %s" % epoch)
 		b = 0
 
 		for batch in pbar:
 			b+=1
+
 			batch = [t.squeeze().to(config.device) for t in batch]
 			ground_truths = batch[-1].to(config.device)
 			predictions = model(*batch[:-1])
@@ -47,14 +45,26 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 			# tqdm.write(f'{correct_samples}')
 			# tqdm.write(f'{total_samples}')
 
-			if b%5 == 0:
-				tqdm.write(f'epoch avg loss: {round(epoch_running_loss / b , 8)}    epoch accuracy: {correct_samples / total_samples}')
+			pbar.set_description("Epoch %s: train loss %s, train acc %s" % (epoch, round(epoch_running_loss/b, 5), round(correct_samples * 100 / total_samples, 3)))
+
+		val_acc, val_loss = evaluate(model, val_dataset)
+		print("Epoch %s: val loss %s, val acc %s" % (epoch, round(val_loss, 5), round(val_acc, 3)))
+
+		if val_loss < best_val_loss:
+			save_path = "checkpoints/model.pth"
+			print("New best model saved to %s" % save_path)
+			best_val_loss = val_loss
+			torch.save(model.state_dict(), save_path)
 
 def evaluate(model, dataset):
 	model.eval()
 	
 	pbar = tqdm(dataset)
 	pbar.set_description("Evaluating")
+
+	total_samples = 0
+	correct_samples = 0
+	total_loss = 0
 
 	with torch.no_grad():
 
@@ -63,13 +73,14 @@ def evaluate(model, dataset):
 			ground_truths = batch[-1].to(config.device)
 			predictions = model(*batch[:-1])
 
-			loss = criterion(predictions, ground_truths)
+			total_loss += criterion(predictions, ground_truths).item()
 			correct_samples += calculate_correct(predictions, ground_truths).item()
 			total_samples += ground_truths.shape[0]
 
-		accuracy = correct_samples/total_samples
+		accuracy = correct_samples * 100 / total_samples
+		loss = total_loss / total_samples
 
-		return accuracy
+		return accuracy, loss
 
 
 def calculate_correct(predictions, ground_truths):

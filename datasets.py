@@ -13,8 +13,9 @@ import pickle
 
 class IQA_Dataset(Dataset):
 	def __init__(self, dataset_folder, annotation_file, mode="train"):
-		self.annotations = pd.read_csv(annotation_file)
-		self.image_folder_path = dataset_folder + 'train2014/'
+		anno_df = pd.read_csv(annotation_file)
+		self.annotations = anno_df.loc[anno_df['mode']==mode]
+		self.image_folder_path = dataset_folder + mode + '2014/'
 		self.mode = mode
 		self.resize = transforms.Resize(config.image_size)
 		self.norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -23,12 +24,13 @@ class IQA_Dataset(Dataset):
 
 
 	def __len__(self):
+		return 1000
 		return self.annotations.shape[0]
 
 	def __getitem__(self, idx):
 		sample = self.annotations.iloc[[idx]]
 		image_name = str(sample["image_id"].item())
-		image_full_name = "COCO_train2014_"+"0"*(12-len(image_name)) + image_name + ".jpg"
+		image_full_name = "COCO_" + self.mode + "2014_"+"0"*(12-len(image_name)) + image_name + ".jpg"
 		
 		image_path = os.path.join(self.image_folder_path, image_full_name)
 
@@ -46,6 +48,8 @@ class IQA_Dataset(Dataset):
 
 		for i in range(5):
 			current_answer = sample[f"a_{i}"].item()
+			if isinstance(current_answer, float):
+				current_answer = ""
 			answer_list.append(current_answer)
 			answer_tokens, answer_mask = self.tokenize(current_answer, max_length=config.padded_language_length_answer)
 			answer_tokens_list.append(answer_tokens)
@@ -53,7 +57,10 @@ class IQA_Dataset(Dataset):
 
 		answer_tokens = torch.stack(answer_tokens_list)
 		answer_masks = torch.stack(answer_masks_list)
-
+		# print(answer_list)
+		# print(self.mode)
+		# print(sample['question_id'].item())
+		# print(sample["ground_truth"].item())
 		return image_tensor, question_tokens, question_mask, answer_tokens, answer_masks, answer_list.index(sample["ground_truth"].item())
 
 class TGIF_Dataset(Dataset):
@@ -174,17 +181,13 @@ def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
 	if not (dataset_folder and annotation_file) and data_source=="TGIF":
 		raise Exception("Both image_folder and annotation_file location are required, 1 or both not passed")
 
-	modes = ["train", "val", "test"]
+	modes = ["train", "val"] # "test"
 
 	if data_source=="TGIF":
 		dataset_class = TGIF_Dataset
 
 	elif data_source=="IQA":
-		return DataLoader(
-			IQA_Dataset(dataset_folder, annotation_file),
-			batch_size=config.batch_size,
-			shuffle=False,
-			num_workers=0)
+		dataset_class = IQA_Dataset
 
 
 	elif data_source=="GIF_preproc":
@@ -207,8 +210,8 @@ def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
 	return [DataLoader(
 		dataset_class(dataset_folder, annotation_file, mode),
 		batch_size=config.batch_size,
-		shuffle=True,
-		num_workers=0) 
+		shuffle= mode=="train" , # we only shuffle the training set, not the validation
+		num_workers=0)
 		for mode in modes]
 
 
