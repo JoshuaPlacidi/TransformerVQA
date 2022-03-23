@@ -98,8 +98,12 @@ class IQA(nn.Module):
 		i_new = self.feature_extractor(i) # [batch_size, 512] -> Output of resnet
 		# Calculate q
 		q_encoded = self.language_encoder(q, q_mask) # [batch_size, config.question_length, 768 (bert)]
+		
 		# TODO: We are destroying everything bert has done??
 		q_encoded_hid = self.lan_to_hid(q_encoded) # [batch_size, config.question_length, config.h_dim]
+
+		# q_mask_reshape TODO
+		q_mask_reshaped = torch.cat([i.repeat(5, 1) for i in q_mask])
 
 		# Calculate a
 		stacked_a_tokens = torch.reshape(a, shape=(a.shape[0]*a.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
@@ -124,8 +128,14 @@ class IQA(nn.Module):
 		# iqa[0][1] == reshaped_iqa[1] All true. Makes sense
 		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
 
+		image_mask = torch.full(size=(config.batch_size*5, 1), fill_value =1).to(config.device)
+		whole_mask = torch.cat([image_mask, q_mask_reshaped, stacked_a_masks], axis=1)
+		#  We need to convert the mask to boolean, and invert it, because: 
+		# True value indicates that the corresponding key value will be ignored for the purpose of attention
+		# https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html
+		whole_mask = ~ (whole_mask > 0)
 
-		stacked_iqa = self.iqa_encoder(reshaped_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)])
+		stacked_iqa = self.iqa_encoder(reshaped_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)], key_padding_mask=whole_mask)
 		iqa_encoded = torch.reshape(stacked_iqa, shape=(i_new.shape[0], 5, -1, config.h_dim))
 
 		# Is this really what we want?? I though we wanted to take the first token or something, not the whole thing

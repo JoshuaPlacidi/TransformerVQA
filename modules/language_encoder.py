@@ -1,5 +1,4 @@
 from tkinter import X
-#from jax import mask
 import torch
 import torch.nn as nn
 from transformers import DistilBertModel, DistilBertConfig, DistilBertTokenizer

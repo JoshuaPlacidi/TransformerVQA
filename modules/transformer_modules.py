@@ -27,16 +27,16 @@ class TransformerEncoder(nn.Module):
 
 		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers, norm=self.layer_norm)
  
-	def forward(self, x, segment_mapping=None):
+	def forward(self, x, segment_mapping=None, key_padding_mask=None):
 		# TODO is this correct?
 		if segment_mapping:
-			def generate_segment_embedding(label, num_repeat):
-				return self.segment_embedding(torch.tensor(label).long().to(config.device)).unsqueeze(0).repeat(num_repeat, 1)
+			def generate_segment_embedding(label, num_repeat, current_device):
+				return self.segment_embedding(torch.tensor(label).long().to(current_device)).unsqueeze(0).repeat(num_repeat, 1)
 
-			pos_and_segment_embedding = torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
+			pos_and_segment_embedding = torch.cat([self.pos_encoder(x[:, ini:fin]) + generate_segment_embedding(i, fin-ini, x.device) for i, (ini, fin) in enumerate(segment_mapping)], dim=1)
 			new_x = x + pos_and_segment_embedding
 
-			x = self.encoder(new_x)
+			x = self.encoder(new_x, src_key_padding_mask=key_padding_mask)
 			return x
 
 			# emb_0 = self.segment_embedding(torch.tensor(0).long().to(config.device)).unsqueeze(0)
@@ -63,7 +63,7 @@ class TransformerEncoder(nn.Module):
 		
 
 
-		x = self.encoder(x)
+		x = self.encoder(x, key_padding_mask=src_mask)
 		return x
 
 class TransformerEncoderLayer(nn.Module):

@@ -2,15 +2,21 @@ import torch
 from tqdm import tqdm
 import config
 import time
+import torch.nn as nn
 
 criterion = torch.nn.CrossEntropyLoss()
 
 def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
+	if torch.cuda.device_count() > 1 and config.use_gpu:
+		print(f"Using multi-gpu: Devices={config.number_devices}")
+		config.device = torch.cuda.current_device()
+		model.to(config.device)
+		model = nn.DataParallel(module=model, device_ids = [i for i in range(torch.cuda.device_count() )]).cuda()
+	else:
+		model.to(config.device)
 	import torch.optim as optim
 	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=num_epochs//4, gamma=0.1)
-	
-	model.to(config.device)
 
 	best_val_loss = 10
 	for epoch in range(num_epochs):
@@ -26,10 +32,15 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 
 		for batch in pbar:
 			b+=1
+			if config.number_devices > 1:
+				batch = [t.squeeze() for t in batch]
+			else:
+				batch = [t.squeeze().to(config.device) for t in batch]
+			
+			ground_truths = batch[-1].cuda(non_blocking=True)
 
-			batch = [t.squeeze().to(config.device) for t in batch]
-			ground_truths = batch[-1].to(config.device)
-			predictions = model(*batch[:-1])
+			i, q, q_mask, a, a_mask = batch[:-1]
+			predictions = model(i, q, q_mask, a, a_mask)
 
 			loss = criterion(predictions, ground_truths)
 			correct_samples += calculate_correct(predictions, ground_truths).item()
@@ -42,8 +53,6 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 
 			epoch_running_loss += loss.item()
 			model.zero_grad()
-			# tqdm.write(f'{correct_samples}')
-			# tqdm.write(f'{total_samples}')
 
 			pbar.set_description("Epoch %s: train loss %s, train acc %s" % (epoch, round(epoch_running_loss/b, 5), round(correct_samples * 100 / total_samples, 3)))
 
