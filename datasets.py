@@ -10,13 +10,16 @@ import config
 import os
 import numpy as np
 import pickle
+import random
+import ast
 
 class IQA_Dataset(Dataset):
-	def __init__(self, dataset_folder, annotation_file, mode="train"):
+	def __init__(self, dataset_folder, annotation_file, mode="train", num_answers=18):
 		anno_df = pd.read_csv(annotation_file)
 		self.annotations = anno_df.loc[anno_df['mode']==mode]
 		self.image_folder_path = dataset_folder + mode + '2014/'
 		self.mode = mode
+		self.num_answers = num_answers
 		self.resize = transforms.Resize(config.image_size)
 		self.norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 		self.to_tensor = transforms.ToTensor()
@@ -24,7 +27,10 @@ class IQA_Dataset(Dataset):
 
 
 	def __len__(self):
-		return 1000
+		# if self.mode == "train":
+		# 	return 20000
+		# elif self.mode == "val":
+		# 	return 2000
 		return self.annotations.shape[0]
 
 	def __getitem__(self, idx):
@@ -42,29 +48,32 @@ class IQA_Dataset(Dataset):
 		# question_mask [1, config.padded_language_length_question]
 		question_tokens, question_mask = self.tokenize(sample['question'].item(), max_length=config.padded_language_length_question)
 
-		answer_list = []
-		answer_tokens_list = []
-		answer_masks_list = []
+		ground_truth = sample['ground_truth'].item()
+		gt_tokens, gt_mask = self.tokenize(ground_truth, max_length=config.padded_language_length_answer)
 
-		for i in range(5):
-			current_answer = sample[f"a_{i}"].item()
-			if isinstance(current_answer, float):
-				current_answer = ""
-			answer_list.append(current_answer)
-			answer_tokens, answer_mask = self.tokenize(current_answer, max_length=config.padded_language_length_answer)
-			answer_tokens_list.append(answer_tokens)
-			answer_masks_list.append(answer_mask)
+		false_answers = ast.literal_eval(sample['multiple_choices'].item())
+		false_answers.remove(ground_truth)
 
-		answer_tokens = torch.stack(answer_tokens_list)
-		answer_masks = torch.stack(answer_masks_list)
-		# print(answer_list)
-		# print(self.mode)
-		# print(sample['question_id'].item())
-		# print(sample["ground_truth"].item())
-		return image_tensor, question_tokens, question_mask, answer_tokens, answer_masks, answer_list.index(sample["ground_truth"].item())
+		answer_tuples = [(ground_truth, gt_tokens, gt_mask)]
+
+		for _ in range(self.num_answers - 1):
+			rand_index = random.randint(0, len(false_answers)-1)
+			answer = false_answers[rand_index] # select a random false answer that hasnt been selected before
+			answer_tokens, answer_mask = self.tokenize(answer, max_length=config.padded_language_length_answer)
+
+			answer_tuples.append((answer, answer_tokens, answer_mask))
+
+			false_answers.remove(answer) # remove selected answer so it doesnt get picked again
+
+		random.shuffle(answer_tuples)
+
+		answer_list, answer_tokens, answer_masks = map(list, zip(*answer_tuples))
+		answer_tokens, answer_masks = torch.stack(answer_tokens), torch.stack(answer_masks)
+
+		return image_tensor, question_tokens, question_mask, answer_tokens, answer_masks, answer_list.index(ground_truth)
 
 class TGIF_Dataset(Dataset):
-	def __init__(self, dataset_folder, annotation_file, mode="train"):
+	def __init__(self, dataset_folder, annotation_file, mode="train", num_answers=5):
 		self.annotations = pd.read_csv(annotation_file)
 		self.image_folder_path = dataset_folder + 'tgif_image_features/'
 		self.qa_folder_path = dataset_folder + 'tgif_text_features/'
@@ -208,9 +217,9 @@ def get_dataset(data_source="TGIF", dataset_folder=None, annotation_file=None):
 		raise Exception("data source not recognised:", data_source)
 
 	return [DataLoader(
-		dataset_class(dataset_folder, annotation_file, mode),
+		dataset_class(dataset_folder, annotation_file, mode, config.num_answers),
 		batch_size=config.batch_size,
-		shuffle= mode=="train" , # we only shuffle the training set, not the validation
+		shuffle = False, # we only shuffle the training set, not the validation
 		num_workers=0)
 		for mode in modes]
 
