@@ -70,7 +70,7 @@ class PTVQA(nn.Module):
 		vqa = torch.reshape(stacked_vqa, shape=(i.shape[0], 5, -1, config.h_dim))
 		vqa = self.hid_to_one(vqa)
 		vqa = vqa[:,:,0,:].squeeze()
-		vqa = self.softmax(vqa)
+		#vqa = self.softmax(vqa)
 
 		return vqa
 
@@ -99,7 +99,7 @@ class IQA(nn.Module):
 		q_encoded_hid = self.lan_to_hid(q_encoded) # [batch_size, config.question_length, config.h_dim]
 
 		# q_mask_reshape TODO
-		q_mask_reshaped = torch.cat([i.repeat(5, 1) for i in q_mask])
+		q_mask_reshaped = torch.cat([i.repeat(a.shape[1], 1) for i in q_mask])
 
 		# Calculate a
 		stacked_a_tokens = torch.reshape(a, shape=(a.shape[0]*a.shape[1], -1)) # [batch_size * number_answers, padded_language_length_answer]
@@ -107,22 +107,22 @@ class IQA(nn.Module):
 
 		stacked_answer_features = self.language_encoder(stacked_a_tokens, stacked_a_masks) # [batch_size * number_answers, padded_language_length_answer, 768 (bert)]
 
-		a = torch.reshape(stacked_answer_features, shape=(i.shape[0], 5, config.padded_language_length_answer, -1)) # [batch_size, number_answers, padded_language_length_answer, 768 (bert)]
+		a = torch.reshape(stacked_answer_features, shape=(i.shape[0], a.shape[1], config.padded_language_length_answer, -1)) # [batch_size, number_answers, padded_language_length_answer, 768 (bert)]
 		a = self.lan_to_hid(a) # [batch_size, number_answers, padded_language_length_answer, config.hdim]
 
 		#
 		# Multi-Modal Combination
 		#
 		i_new = i_new.unsqueeze(1).unsqueeze(1) # [batch_size, 1, 1, 512] -> Output of resnet
-		i_new = i_new.repeat(1,5,1,1) # [batch_size, number_answers, 1, 512] -> Output of resnet
+		i_new = i_new.repeat(1,a.shape[1],1,1) # [batch_size, number_answers, 1, 512] -> Output of resnet
 		q_encoded_hid_unsqueeze = q_encoded_hid.unsqueeze(1) # [batch_size, 1, config.question_length, config.h_dim]
-		q_encoded_hid_repeat = q_encoded_hid_unsqueeze.repeat(1,5,1,1) # [batch_size, 5, config.question_length, config.h_dim]
+		q_encoded_hid_repeat = q_encoded_hid_unsqueeze.repeat(1,a.shape[1],1,1) # [batch_size, 5, config.question_length, config.h_dim]
 	
 		# iqa[0][0][15:] == iqa[0][1][15:] All false (makes sense, padded_language_length is the part that differs)
 		iqa = torch.cat((i_new,q_encoded_hid_repeat,a), dim=2) # [batch_size, 5, 1 + config.question_length + padded_language_length_answer, config.h_dim]
 
 		# iqa[0][1] == reshaped_iqa[1] All true. Makes sense
-		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
+		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * a.shape[1], -1, config.h_dim))
 
 		image_mask = torch.full(size=(i.shape[0]*5, 1), fill_value =1).to(i.device)
 		whole_mask = torch.cat([image_mask, q_mask_reshaped, stacked_a_masks], axis=1)
@@ -132,7 +132,7 @@ class IQA(nn.Module):
 		whole_mask = ~ (whole_mask > 0)
 
 		stacked_iqa = self.iqa_encoder(reshaped_iqa, [(0, 1), (1, 1+config.padded_language_length_question), (1+config.padded_language_length_question, 1+config.padded_language_length_question+config.padded_language_length_answer)], key_padding_mask=whole_mask)
-		iqa_encoded = torch.reshape(stacked_iqa, shape=(i_new.shape[0], 5, -1, config.h_dim))
+		iqa_encoded = torch.reshape(stacked_iqa, shape=(i_new.shape[0], a.shape[1], -1, config.h_dim))
 
 		# Is this really what we want?? I though we wanted to take the first token or something, not the whole thing
 		# iqa_encoded[0][0][:15] == iqa_encoded[0][1][:15] all true
