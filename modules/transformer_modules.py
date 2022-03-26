@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import math
+
 import config
 
 class TransformerEncoder(nn.Module):
@@ -28,6 +29,12 @@ class TransformerEncoder(nn.Module):
 		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers, norm=self.layer_norm)
  
 	def forward(self, x, segment_mapping=None, key_padding_mask=None):
+		
+		if config.apply_masking_attn is False:
+			key_padding_mask = None
+			segment_mapping = None
+		
+
 		# TODO is this correct?
 		if segment_mapping:
 			def generate_segment_embedding(label, num_repeat, current_device):
@@ -63,7 +70,7 @@ class TransformerEncoder(nn.Module):
 		
 
 
-		x = self.encoder(x, key_padding_mask=src_mask)
+		x = self.encoder(x, src_key_padding_mask=key_padding_mask)
 		return x
 
 class TransformerEncoderLayer(nn.Module):

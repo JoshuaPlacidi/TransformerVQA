@@ -1,12 +1,8 @@
 import torch
 import torch.nn as nn
-
 from modules.frame_features import get_feature_extractor
 from modules.language_encoder import get_language_encoder
-from modules.transformer_modules import TransformerEncoder, TransformerDecoder
-
-from transformers import DistilBertTokenizer
-
+from modules.transformer_modules import TransformerEncoder
 import config
 
 class PTVQA(nn.Module):
@@ -83,16 +79,16 @@ class IQA(nn.Module):
 		super(IQA, self).__init__()
 
 		# Frame feature extractor
-		self.feature_extractor = get_feature_extractor('resnet', h_dim=config.h_dim)
+		self.feature_extractor = get_feature_extractor(config.feature_extractor, h_dim=config.h_dim)
 		
 		# Language Encoder
 		self.language_encoder = get_language_encoder()
 
-		self.iqa_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=6, dropout=0)
+		self.iqa_encoder = TransformerEncoder(h_dim=config.h_dim, ff_dim=config.h_dim, num_heads=8, num_layers=config.encoder_num_layers, dropout=0)
 
 		self.lan_to_hid = nn.Linear(768, config.h_dim)
 		self.hid_to_one = nn.Linear(config.h_dim, 1)
-		self.softmax = nn.Softmax(dim=1)
+		# self.softmax = nn.Softmax(dim=1) TODO
 
 	def forward(self, i, q, q_mask, a, a_mask):
 		i_new = self.feature_extractor(i) # [batch_size, 512] -> Output of resnet
@@ -128,7 +124,7 @@ class IQA(nn.Module):
 		# iqa[0][1] == reshaped_iqa[1] All true. Makes sense
 		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * 5, -1, config.h_dim))
 
-		image_mask = torch.full(size=(config.batch_size*5, 1), fill_value =1).to(config.device)
+		image_mask = torch.full(size=(i.shape[0]*5, 1), fill_value =1).to(i.device)
 		whole_mask = torch.cat([image_mask, q_mask_reshaped, stacked_a_masks], axis=1)
 		#  We need to convert the mask to boolean, and invert it, because: 
 		# True value indicates that the corresponding key value will be ignored for the purpose of attention
@@ -144,6 +140,8 @@ class IQA(nn.Module):
 
 		# [batch_size, 5, 1 + config.question_length + padded_language_length_answer, 1]
 		iqa_encoded_linear_squeeze = iqa_encoded_linear[:,:,0,:].squeeze() # For each sample, all the values are the same
+		
+		return iqa_encoded_linear_squeeze
 		
 		output = self.softmax(iqa_encoded_linear_squeeze)
 

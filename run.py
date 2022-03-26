@@ -1,7 +1,5 @@
 import torch
-
 import config
-
 from training import train_vqa, gif_preproc, text_preproc
 from model import get_PTVQA, get_IQA, get_ImageFeatureExtractor, get_language_encoder
 from datasets import get_dataset
@@ -23,7 +21,31 @@ train_dataset, val_dataset = get_dataset(
 
 model = get_IQA()
 
-train_vqa(model, train_dataset=train_dataset, val_dataset=val_dataset, num_epochs=100)
+optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
+
+best_val_loss=1000
+if config.resume_checkpoint:
+   save_path = f"checkpoints/model_{config.check_point_load}.pth"
+   checkpoint_data = torch.load(save_path)
+   best_val_loss = checkpoint_data["best_loss"]
+   model.load_state_dict(checkpoint_data['state_dict'])
+   print("=> loaded checkpoint '{}' (epoch {}). Best valditation loss: {}"
+         .format(config.check_point_load, checkpoint_data['epoch'], best_val_loss))   
+
+if torch.cuda.device_count() > 1 and config.use_gpu:
+   print(f"Using multi-gpu: Devices={config.number_devices}")
+   config.device = torch.cuda.current_device()
+   model.to(config.device)
+   model = torch.nn.DataParallel(module=model, device_ids = [i for i in range(torch.cuda.device_count())]).cuda()
+else:
+   model.to(config.device)
+
+# This needs to be done after moving the model to the gpu 
+if config.resume_checkpoint:
+   optimizer.load_state_dict(checkpoint_data['optimizer'])
+   print("=> loaded optimizer")   
+
+train_vqa(model, optimizer, train_dataset=train_dataset, val_dataset=val_dataset, num_epochs=100, best_val_loss=best_val_loss)
 
 #
 # Gif preproc

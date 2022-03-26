@@ -3,22 +3,13 @@ from tqdm import tqdm
 import config
 import time
 import torch.nn as nn
-
+import torch.optim as optim
+	
 criterion = torch.nn.CrossEntropyLoss()
 
-def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
-	if torch.cuda.device_count() > 1 and config.use_gpu:
-		print(f"Using multi-gpu: Devices={config.number_devices}")
-		config.device = torch.cuda.current_device()
-		model.to(config.device)
-		model = nn.DataParallel(module=model, device_ids = [i for i in range(torch.cuda.device_count() )]).cuda()
-	else:
-		model.to(config.device)
-	import torch.optim as optim
-	optimizer = optim.AdamW(model.parameters(), lr=0.0001)
-	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=num_epochs//4, gamma=0.1)
+def train_vqa(model, optimizer, train_dataset, val_dataset=None, num_epochs=50, best_val_loss=1000):	
+	scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=5, gamma=0.1)
 
-	best_val_loss = 10
 	for epoch in range(num_epochs):
 		model.train()
 
@@ -37,17 +28,21 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 			else:
 				batch = [t.squeeze().to(config.device) for t in batch]
 			
-			ground_truths = batch[-1].cuda(non_blocking=True)
+			try:
+				ground_truths = batch[-1].cuda(non_blocking=True)
+				
+			except:
+				ground_truths = batch[-1]
 
 			i, q, q_mask, a, a_mask = batch[:-1]
 			predictions = model(i, q, q_mask, a, a_mask)
-
+			
 			loss = criterion(predictions, ground_truths)
 			correct_samples += calculate_correct(predictions, ground_truths).item()
 			total_samples += ground_truths.shape[0]
 			
 			loss.backward()
-			torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+			# torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 			optimizer.step()
 			scheduler.step()
 
@@ -56,14 +51,20 @@ def train_vqa(model, train_dataset, val_dataset=None, num_epochs=50):
 
 			pbar.set_description("Epoch %s: train loss %s, train acc %s" % (epoch, round(epoch_running_loss/b, 5), round(correct_samples * 100 / total_samples, 3)))
 
-		val_acc, val_loss = evaluate(model, val_dataset)
-		print("Epoch %s: val loss %s, val acc %s" % (epoch, round(val_loss, 5), round(val_acc, 3)))
+		# val_acc, val_loss = evaluate(model, val_dataset)
+		# print("Epoch %s: val loss %s, val acc %s" % (epoch, round(val_loss, 5), round(val_acc, 3)))
 
-		if val_loss < best_val_loss:
-			save_path = "checkpoints/model.pth"
-			print("New best model saved to %s" % save_path)
-			best_val_loss = val_loss
-			torch.save(model.state_dict(), save_path)
+		# if val_loss < best_val_loss:
+		# 	save_path = f"checkpoints/model_{config.check_point_name}.pth"
+		# 	print(f"New best model saved to {save_path}. Val loss: {best_val_loss}")
+		# 	best_val_loss = val_loss
+		# 	checkpoint_data = {
+        #         'epoch': epoch,
+        #         'state_dict': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
+        #         'best_loss': best_val_loss,
+        #         'optimizer' : optimizer.state_dict(),
+        #     }
+		# 	torch.save(checkpoint_data, save_path)
 
 def evaluate(model, dataset):
 	model.eval()

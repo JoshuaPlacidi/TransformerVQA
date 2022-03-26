@@ -44,8 +44,10 @@ class BertEncoder(nn.Module):
         # self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
         self.encoder = DistilBertModel.from_pretrained('distilbert-base-uncased')
-        for param in self.encoder.parameters():
-            param.requires_grad = False
+        
+        if config.train_bert is False:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
 
         # If mapping to a hidden dimension size, otherwise output will be 768
         if h_dim:
@@ -57,9 +59,13 @@ class BertEncoder(nn.Module):
     def forward(self, tokens, masks=None):
         # tokens = torch.tensor([[ 101, 2054, 4338, 2003, 1996, 6847, 2835, 1029,  102,    0,    0,    0, 0,    0]])
         # masks = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]])
-        #self.encoder.eval()
-        #with torch.no_grad():
-        x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
+        if config.train_bert:
+            x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
+
+        else:
+            self.encoder.eval()
+            with torch.no_grad():
+                x = self.encoder(input_ids=tokens, attention_mask=masks)[0]
 
         # print(x)
         if self.map_to_hid:

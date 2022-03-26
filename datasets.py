@@ -10,6 +10,7 @@ import config
 import os
 import numpy as np
 import pickle
+from transformers import DeiTFeatureExtractor
 
 class IQA_Dataset(Dataset):
 	def __init__(self, dataset_folder, annotation_file, mode="train"):
@@ -21,7 +22,8 @@ class IQA_Dataset(Dataset):
 		self.norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 		self.to_tensor = transforms.ToTensor()
 		self.tokenize = BertTokenizer().tokenize_text
-
+		if config.feature_extractor == "deit":
+			self.deit_features = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 	def __len__(self):
 		return 1000
@@ -36,7 +38,11 @@ class IQA_Dataset(Dataset):
 
 		image = Image.open(image_path).convert('RGB')
 
-		image_tensor = self.norm(self.to_tensor(self.resize(image))) # [3, config.image_size, config.image_size]
+		if config.feature_extractor == "deit":
+			image_tensor = self.deit_features(image, return_tensors="pt")["pixel_values"]
+			#  = self.to_tensor(self.resize(image)) # [3, config.image_size, config.image_size]
+		else:
+			image_tensor = self.norm(self.to_tensor(self.resize(image))) # [3, config.image_size, config.image_size]
 		
 		# question_tokens [1, config.padded_language_length_question]
 		# question_mask [1, config.padded_language_length_question]
@@ -48,8 +54,6 @@ class IQA_Dataset(Dataset):
 
 		for i in range(5):
 			current_answer = sample[f"a_{i}"].item()
-			if isinstance(current_answer, float):
-				current_answer = ""
 			answer_list.append(current_answer)
 			answer_tokens, answer_mask = self.tokenize(current_answer, max_length=config.padded_language_length_answer)
 			answer_tokens_list.append(answer_tokens)
