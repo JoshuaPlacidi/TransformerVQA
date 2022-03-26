@@ -124,7 +124,7 @@ class IQA(nn.Module):
 		# iqa[0][1] == reshaped_iqa[1] All true. Makes sense
 		reshaped_iqa = torch.reshape(iqa, shape=(i_new.shape[0] * a.shape[1], -1, config.h_dim))
 
-		image_mask = torch.full(size=(i.shape[0]*5, 1), fill_value =1).to(i.device)
+		image_mask = torch.full(size=(i.shape[0]*a.shape[1], 1), fill_value =1).to(i.device)
 		whole_mask = torch.cat([image_mask, q_mask_reshaped, stacked_a_masks], axis=1)
 		#  We need to convert the mask to boolean, and invert it, because: 
 		# True value indicates that the corresponding key value will be ignored for the purpose of attention

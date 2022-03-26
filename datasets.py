@@ -11,6 +11,8 @@ import os
 import numpy as np
 import pickle
 from transformers import DeiTFeatureExtractor
+import ast
+import random 
 
 class IQA_Dataset(Dataset):
 	def __init__(self, dataset_folder, annotation_file, mode="train", num_answers=18):
